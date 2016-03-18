@@ -30,9 +30,12 @@ local STATUS = Component.GetWidget("Status")
 -- =============================================================================
 
 local g_Away = false
+local g_Count = 0
 local g_ForceEnabled = false
+local g_Incidents = {}
 
 local CB2_CancelGlider
+local CB2_CleanUpIncidents
 
 
 -- =============================================================================
@@ -96,6 +99,14 @@ function CancelGlider()
     Component.SetInputMode("default")
 end
 
+function CleanUpIncidents()
+    Debug.Log("CleanUpIncidents()")
+    log("Previous incidents: " .. tostring(g_Incidents))
+    Notification("Cleaning up " .. tostring(g_Count) .. " incident records, check console for more information")
+    g_Count = 0
+    g_Incidents = {}
+end
+
 function UpdateStatusWidget()
     if (io_Settings.Enabled and (g_Away or g_ForceEnabled)) then
         FRAME:Show(true)
@@ -134,6 +145,9 @@ function OnComponentLoad()
 
     CB2_CancelGlider = Callback2.Create()
     CB2_CancelGlider:Bind(CancelGlider)
+
+    CB2_CleanUpIncidents = Callback2.Create()
+    CB2_CleanUpIncidents:Bind(CleanUpIncidents)
 
     HudManager.BindOnShow(OnHudShow)
 
@@ -187,13 +201,64 @@ function OnEntityAvailable(args)
 
             if (playerTargetBounds and targetBounds) then
                 local distance = Vec3.Distance(playerTargetBounds, targetBounds)
-                Debug.Log("Glider pad distance: " .. tostring(distance))
+                Debug.Log("Glider pad distance:", distance)
 
                 if (distance <= io_Settings.Distance) then
+                    local localUnixTime = System.GetLocalUnixTime()
+                    g_Count = g_Count + 1
+
+                    Debug.Log("Total incident count:", g_Count)
+                    Debug.Log("Local UNIX time:", localUnixTime)
+                    Debug.Table("g_Incidents", g_Incidents)
+
                     if (ownerTargetInfo and ownerTargetInfo.name) then
-                        Notification(tostring(targetInfo.name) .. " was placed near you by " .. tostring(ChatLib.EncodePlayerLink(ownerTargetInfo.name)))
+                        local normalizedOwnerName = tostring(normalize(ownerTargetInfo.name))
+
+                        if (g_Incidents[normalizedOwnerName]) then
+                            Debug.Log("Found a record for possible offender, updating entry")
+                            local count = g_Incidents[normalizedOwnerName].counter + 1
+                            g_Incidents[normalizedOwnerName].counter = count
+
+                            if (tonumber(System.GetElapsedUnixTime(g_Incidents[normalizedOwnerName].timestamp)) > 60) then
+                                g_Incidents[normalizedOwnerName].timestamp = localUnixTime
+                                Notification(tostring(ChatLib.EncodePlayerLink(ownerTargetInfo.name)) .. " placed " .. tostring(targetInfo.name) .. " near you (" .. tostring(count) .. ")")
+                            end
+                        else
+                            Debug.Log("No record for possible offender, creating new entry")
+                            g_Incidents[normalizedOwnerName] = {}
+                            g_Incidents[normalizedOwnerName].counter = 1
+                            g_Incidents[normalizedOwnerName].timestamp = localUnixTime
+
+                            Notification(tostring(ChatLib.EncodePlayerLink(ownerTargetInfo.name)) .. " placed " .. tostring(targetInfo.name) .. " near you (1)")
+                        end
                     else
-                        Notification(tostring(targetInfo.name) .. " was placed near you")
+                        local deployableName = tostring(unicode.upper(targetInfo.name))
+
+                        if (g_Incidents[deployableName]) then
+                            Debug.Log("Found a record for this Glider Pad type, updating entry")
+                            local count = g_Incidents[deployableName].counter + 1
+                            g_Incidents[deployableName].counter = count
+
+                            if (tonumber(System.GetElapsedUnixTime(g_Incidents[deployableName].timestamp)) > 60) then
+                                g_Incidents[deployableName].timestamp = localUnixTime
+                                Notification(tostring(targetInfo.name) .. " was placed near you (" .. tostring(count) .. ")")
+                            end
+                        else
+                            Debug.Log("No record for this Glider Pad type, creating new entry")
+                            g_Incidents[deployableName] = {}
+                            g_Incidents[deployableName].counter = 1
+                            g_Incidents[deployableName].timestamp = localUnixTime
+
+                            Notification(tostring(targetInfo.name) .. " was placed near you (1)")
+                        end
+                    end
+
+                    if (CB2_CleanUpIncidents:Pending()) then
+                        Debug.Log("Rescheduling CB2_CleanUpIncidents")
+                        CB2_CleanUpIncidents:Reschedule(300)
+                    else
+                        Debug.Log("Scheduling CB2_CleanUpIncidents")
+                        CB2_CleanUpIncidents:Schedule(300)
                     end
                 end
             end
