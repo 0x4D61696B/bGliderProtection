@@ -19,4 +19,12 @@
         <Event name="ON_PLAYER_GLIDE"           bind="OnPlayerGlide" />
         <Event name="ON_UI_ENTITY_AVAILABLE"    bind="OnEntityAvailable" />
     </Events>
+
+    <Frames>
+        <HUDFrame name="Main" dimensions="left: 6%; width: 250; bottom: 100%-3.5; height: 32">
+            <Children>
+                <Text id="Status" dimensions="left: 0; width: 100%; bottom: 100%; height: 32" style="font: UbuntuBold_26; halign: center; valign: center; alpha: 1.0; drop-shadow: 1" />
+            </Children>
+        </HUDFrame>
+    </Frames>
 </Component>

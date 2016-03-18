@@ -10,11 +10,19 @@ require "unicode"
 require "lib/lib_Callback2"
 require "lib/lib_ChatLib"
 require "lib/lib_Debug"
+require "lib/lib_HudManager"
 require "lib/lib_InterfaceOptions"
 require "lib/lib_Slash"
 require "lib/lib_Vector"
 
 Debug.EnableLogging(false)
+
+-- =============================================================================
+--  Constants
+-- =============================================================================
+
+local FRAME = Component.GetFrame("Main")
+local STATUS = Component.GetWidget("Status")
 
 
 -- =============================================================================
@@ -23,6 +31,7 @@ Debug.EnableLogging(false)
 
 local g_Away = false
 local g_ForceEnabled = false
+
 local CB2_CancelGlider
 
 
@@ -43,6 +52,7 @@ function OnOptionChanged(id, value)
         Debug.EnableLogging(value)
     elseif (id == "GENERAL_ENABLE") then
         io_Settings.Enabled = value
+        UpdateStatusWidget()
     elseif (id == "GENERAL_NOTIFICATION") then
         io_Settings.Notification = value
     elseif (id == "GENERAL_DISTANCE") then
@@ -86,9 +96,28 @@ function CancelGlider()
     Component.SetInputMode("default")
 end
 
+function UpdateStatusWidget()
+    if (io_Settings.Enabled and (g_Away or g_ForceEnabled)) then
+        FRAME:Show(true)
+    else
+        FRAME:Show(false)
+    end
+end
+
+function OnHudShow(show, duration)
+    FRAME:ParamTo("alpha", tonumber(show), duration)
+end
+
 function OnSlashCommand(args)
+    local stateText = "disabled"
     g_ForceEnabled = not g_ForceEnabled
-    Notification("g_ForceEnabled set to " .. tostring(g_ForceEnabled))
+
+    if (g_ForceEnabled) then
+        stateText = "enabled"
+    end
+
+    Notification("Forced protection " .. stateText)
+    UpdateStatusWidget()
 end
 
 
@@ -106,7 +135,18 @@ function OnComponentLoad()
     CB2_CancelGlider = Callback2.Create()
     CB2_CancelGlider:Bind(CancelGlider)
 
+    HudManager.BindOnShow(OnHudShow)
+
     InterfaceOptions.SetCallbackFunc(OnOptionChanged)
+    InterfaceOptions.AddMovableFrame({
+        frame = FRAME,
+        label = "bGliderProtection",
+        scalable = true
+    })
+
+    FRAME:Show(false)
+    STATUS:SetText("bGliderProtection ACTIVE")
+    STATUS:SetTextColor("#327662")
 end
 
 function OnAFKChanged(args)
@@ -117,6 +157,8 @@ function OnAFKChanged(args)
     else
         g_Away = false
     end
+
+    UpdateStatusWidget()
 end
 
 function OnPlayerGlide(args)
