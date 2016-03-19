@@ -93,10 +93,31 @@ function Notification(message)
 end
 
 function CancelGlider()
-    pcall(function()
-        Player.ActivateTech(nil, io_Settings.Item)
-    end)
-    Component.SetInputMode("default")
+    local itemInfo = Game.GetItemInfoByType(io_Settings.Item)
+    local itemCooldown = 0
+    Debug.Table("itemInfo", itemInfo)
+
+    if (itemInfo and itemInfo.abilityId) then
+        local abilityState = Player.GetAbilityState(itemInfo.abilityId)
+        Debug.Table("abilityState", abilityState)
+
+        if (abilityState and abilityState.requirements and abilityState.requirements.remainingCooldown) then
+            itemCooldown = tonumber(abilityState.requirements.remainingCooldown) + 0.1
+        end
+    end
+
+    if (itemCooldown > 0) then
+        Debug.Log("Item is recharging, rescheduling callback:", itemCooldown)
+        CB2_CancelGlider:Schedule(itemCooldown)
+    else
+        Debug.Log("Trying to activate item")
+        local status, err = pcall(function()
+            Player.ActivateTech(nil, io_Settings.Item)
+        end)
+
+        Debug.Table("pcall()", {status = status, err = err})
+        Component.SetInputMode("default")
+    end
 end
 
 function CleanUpIncidents()
