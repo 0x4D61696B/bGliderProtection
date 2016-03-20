@@ -14,10 +14,11 @@
     />
 
     <Events>
-        <Event name="ON_AFK_CHANGED"            bind="OnAFKChanged" />
-        <Event name="ON_COMPONENT_LOAD"         bind="OnComponentLoad" />
-        <Event name="ON_PLAYER_GLIDE"           bind="OnPlayerGlide" />
-        <Event name="ON_UI_ENTITY_AVAILABLE"    bind="OnEntityAvailable" />
+        <Event name="ON_ABILITY_USED"           bind="OnAbilityUsed"        />
+        <Event name="ON_AFK_CHANGED"            bind="OnAFKChanged"         />
+        <Event name="ON_COMPONENT_LOAD"         bind="OnComponentLoad"      />
+        <Event name="ON_PLAYER_GLIDE"           bind="OnPlayerGlide"        />
+        <Event name="ON_UI_ENTITY_AVAILABLE"    bind="OnEntityAvailable"    />
     </Events>
 
     <Frames>

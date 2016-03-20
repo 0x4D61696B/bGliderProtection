@@ -46,6 +46,7 @@ local io_Settings = {
     Debug = false,
     Enabled = false,
     Notification = false,
+    CancelForcedMode = false,
     Distance = 1.5,
     Item = 121257
 }
@@ -58,6 +59,8 @@ function OnOptionChanged(id, value)
         UpdateStatusWidget()
     elseif (id == "GENERAL_NOTIFICATION") then
         io_Settings.Notification = value
+    elseif (id == "GENERAL_CANCEL_FORCED_MODE") then
+        io_Settings.CancelForcedMode = value
     elseif (id == "GENERAL_DISTANCE") then
         io_Settings.Distance = tonumber(value)
     elseif (id == "GENERAL_ITEM") then
@@ -79,6 +82,7 @@ do
     InterfaceOptions.AddCheckBox({id = "DEBUG_ENABLE", label = "Debug mode", default = io_Settings.Debug})
     InterfaceOptions.AddCheckBox({id = "GENERAL_ENABLE", label = "Addon enabled", default = io_Settings.Enabled})
     InterfaceOptions.AddCheckBox({id = "GENERAL_NOTIFICATION", label = "Show notification in chat", default = io_Settings.Notification})
+    InterfaceOptions.AddCheckBox({id = "GENERAL_CANCEL_FORCED_MODE", label = "Automatically cancel forced mode when using abilities or items", default = io_Settings.CancelForcedMode})
     InterfaceOptions.AddSlider({id = "GENERAL_DISTANCE", label = "Notification distance", default = io_Settings.Distance, min = 0.5, max = 5.0, inc = 0.1, format = "%0.1f", suffix = "m"})
     InterfaceOptions.AddTextInput({id = "GENERAL_ITEM", label = "Item SDB ID", default = io_Settings.Item, numeric = true, whitespace = false})
 end
@@ -182,6 +186,17 @@ function OnComponentLoad()
     FRAME:Show(false)
     STATUS:SetText("bGliderProtection ACTIVE")
     STATUS:SetTextColor("#327662")
+end
+
+function OnAbilityUsed(args)
+    Debug.Event(args)
+    local itemInfo = Game.GetItemInfoByType(io_Settings.Item)
+
+    if (io_Settings.CancelForcedMode and g_ForceEnabled and args.id and itemInfo and itemInfo.abilityId and tonumber(args.id) ~= tonumber(itemInfo.abilityId)) then
+        g_ForceEnabled = false
+        Notification("Forced protection disabled")
+        UpdateStatusWidget()
+    end
 end
 
 function OnAFKChanged(args)
