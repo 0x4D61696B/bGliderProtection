@@ -97,30 +97,56 @@ function Notification(message)
 end
 
 function CancelGlider()
-    local itemInfo = Game.GetItemInfoByType(io_Settings.Item)
-    local itemCooldown = 0
-    Debug.Table("itemInfo", itemInfo)
+    Debug.Log("CancelGlider()")
+    local gliderStatus = Player.GetGliderStatus()
+    Debug.Table("gliderStatus", gliderStatus)
 
-    if (itemInfo and itemInfo.abilityId) then
-        local abilityState = Player.GetAbilityState(itemInfo.abilityId)
-        Debug.Table("abilityState", abilityState)
+    -- Check if we are actually gliding
+    if (gliderStatus and gliderStatus.glider_state and (gliderStatus.glider_state == "Gliding" or gliderStatus.glider_state == "Glider-Thrusters")) then
+        -- Get the item info
+        local itemInfo = Game.GetItemInfoByType(io_Settings.Item)
+        local itemCooldown = 0
+        Debug.Table("itemInfo", itemInfo)
 
-        if (abilityState and abilityState.requirements and abilityState.requirements.remainingCooldown) then
-            itemCooldown = tonumber(abilityState.requirements.remainingCooldown) + 0.1
+        -- Get the ability info and state of the item
+        if (itemInfo and itemInfo.abilityId) then
+            local abilityState = Player.GetAbilityState(itemInfo.abilityId)
+            Debug.Table("abilityState", abilityState)
+
+            -- Try to get the ability cooldown
+            if (abilityState and abilityState.requirements and abilityState.requirements.remainingCooldown) then
+                itemCooldown = tonumber(abilityState.requirements.remainingCooldown) + 0.1
+            end
         end
-    end
 
-    if (itemCooldown > 0) then
-        Debug.Log("Item is recharging, rescheduling callback:", itemCooldown)
-        CB2_CancelGlider:Schedule(itemCooldown)
-    else
-        Debug.Log("Trying to activate item")
-        local status, err = pcall(function()
-            Player.ActivateTech(nil, io_Settings.Item)
-        end)
+        -- Item is still recharging, reschedule the callback
+        if (itemCooldown > 0) then
+            if (not CB2_CancelGlider:Pending()) then
+                Debug.Log("Item is recharging, rescheduling callback:", itemCooldown)
+                CB2_CancelGlider:Schedule(itemCooldown)
 
-        Debug.Table("pcall()", {status = status, err = err})
-        Component.SetInputMode("default")
+            -- If the callback is already scheduled, check if the recharge time of the item is shorter and reschedule if so
+            elseif (CB2_CancelGlider:Pending() and CB2_CancelGlider:GetRemainingTime() > itemCooldown) then
+                Debug.Log("Item is recharging, rescheduling callback:", itemCooldown)
+                CB2_CancelGlider:Reschedule(itemCooldown)
+            end
+
+        -- Item is not recharging, try to activate right away
+        else
+            Debug.Log("Trying to activate item:", itemInfo.name)
+            local status, err = pcall(function()
+                Player.ActivateTech(nil, io_Settings.Item)
+            end)
+
+            Debug.Table("pcall()", {status = status, err = err})
+            Component.SetInputMode("default")
+
+            -- Schedule a callback to see if the glider was actually canceled (Icarus boost ...)
+            if (not CB2_CancelGlider:Pending()) then
+                Debug.Log("Scheduling callback to check if glider was canceled")
+                CB2_CancelGlider:Schedule(1)
+            end
+        end
     end
 end
 
@@ -128,6 +154,7 @@ function CleanUpIncidents()
     Debug.Log("CleanUpIncidents()")
     log("Previous incidents: " .. tostring(g_Incidents))
     Notification("Cleaning up " .. tostring(g_Count) .. " incident records, check console for more information")
+
     g_Count = 0
     g_Incidents = {}
 end
