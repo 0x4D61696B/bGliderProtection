@@ -172,14 +172,9 @@ function OnHudShow(show, duration)
 end
 
 function OnSlashCommand(args)
-    local stateText = "disabled"
     g_ForceEnabled = not g_ForceEnabled
 
-    if (g_ForceEnabled) then
-        stateText = "enabled"
-    end
-
-    Notification("Forced protection " .. stateText)
+    Notification("Forced protection " .. (g_ForceEnabled and "enabled" or "disabled"))
     UpdateStatusWidget()
 end
 
@@ -219,6 +214,7 @@ function OnAbilityUsed(args)
     Debug.Event(args)
     local itemInfo = Game.GetItemInfoByType(io_Settings.Item)
 
+    -- Cancel the forced protection if we activate an ability ourself that is not the item set in options
     if (io_Settings.CancelForcedMode and g_ForceEnabled and args.id and itemInfo and itemInfo.abilityId and tonumber(args.id) ~= tonumber(itemInfo.abilityId)) then
         g_ForceEnabled = false
         Notification("Forced protection disabled")
@@ -229,12 +225,7 @@ end
 function OnAFKChanged(args)
     Debug.Event(args)
 
-    if (args.isAfk) then
-        g_Away = true
-    else
-        g_Away = false
-    end
-
+    g_Away = args.isAfk
     UpdateStatusWidget()
 end
 
