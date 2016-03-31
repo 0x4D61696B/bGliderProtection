@@ -17,24 +17,29 @@ require "lib/lib_Vector"
 
 Debug.EnableLogging(false)
 
+
 -- =============================================================================
 --  Constants
 -- =============================================================================
 
-local FRAME = Component.GetFrame("Main")
-local STATUS = Component.GetWidget("Status")
+local FRAME         = Component.GetFrame("Main")
+local STATUS        = Component.GetWidget("Status")
+
+local c_ChecksMax   = 5
 
 
 -- =============================================================================
 --  Variables
 -- =============================================================================
 
-local g_Away = false
-local g_Count = 0
-local g_ForceEnabled = false
-local g_Incidents = {}
+local g_Away            = false
+local g_Checks          = 0
+local g_Count           = 0
+local g_ForceEnabled    = false
+local g_Incidents       = {}
 
 local CB2_CancelGlider
+local CB2_CheckGlider
 local CB2_CleanUpIncidents
 
 
@@ -43,30 +48,38 @@ local CB2_CleanUpIncidents
 -- =============================================================================
 
 local io_Settings = {
-    Debug = false,
-    Enabled = false,
-    Notification = false,
-    CancelForcedMode = false,
-    Distance = 1.5,
-    Item = 121257
+    Debug               = false,
+    Enabled             = false,
+    Notification        = false,
+    CancelForcedMode    = false,
+    Distance            = 1.5,
+    Item                = 121257
 }
 
 function OnOptionChanged(id, value)
-    if (id == "DEBUG_ENABLE") then
+    if     (id == "DEBUG_ENABLE") then
         Debug.EnableLogging(value)
+
     elseif (id == "GENERAL_ENABLE") then
+        g_Checks            = 0
         io_Settings.Enabled = value
+
         UpdateStatusWidget()
+
     elseif (id == "GENERAL_NOTIFICATION") then
         io_Settings.Notification = value
+
     elseif (id == "GENERAL_CANCEL_FORCED_MODE") then
         io_Settings.CancelForcedMode = value
+
     elseif (id == "GENERAL_DISTANCE") then
         io_Settings.Distance = tonumber(value)
+
     elseif (id == "GENERAL_ITEM") then
         if (Game.GetItemInfoByType(tonumber(value)) ~= nil) then
             if (Game.CanUIActivateItem(nil, tonumber(value))) then
                 io_Settings.Item = tonumber(value)
+
             else
                 Notification("Unable to set new item: item can't be activated by the UI")
             end
@@ -96,16 +109,42 @@ function Notification(message)
     ChatLib.Notification({text = "[bGliderProtection] " .. tostring(message)})
 end
 
+function CheckGlider()
+    Debug.Log("CheckGlider()")
+
+    if (io_Settings.Enabled and (g_Away or g_ForceEnabled)) then
+        local gliderStatus = Player.GetGliderStatus()
+        Debug.Table("gliderStatus", gliderStatus)
+
+        -- Check if actually gliding
+        if (gliderStatus and gliderStatus.glider_state and unicode.match(gliderStatus.glider_state, "Glider")) then
+            -- Schedule the glider cancelation
+            if (not CB2_CancelGlider:Pending()) then
+                Component.SetInputMode("cursor")
+                CB2_CancelGlider:Schedule(0.1)
+            end
+
+        -- Not gliding, schedule a check anyway in case something messed up the timing
+        elseif (not CB2_CheckGlider:Pending() and g_Checks < 5) then
+            g_Checks = g_Checks + 1
+
+            Debug.Log("Not gliding, rescheduling callback to verify: check", g_Checks, "of", c_ChecksMax)
+            CB2_CheckGlider:Schedule(3)
+
+        -- Reset the check counter
+        else
+            g_Checks = 0
+        end
+    end
+end
+
 function CancelGlider()
     Debug.Log("CancelGlider()")
-    local gliderStatus = Player.GetGliderStatus()
-    Debug.Table("gliderStatus", gliderStatus)
 
-    -- Check if we are actually gliding
-    if (gliderStatus and gliderStatus.glider_state and (gliderStatus.glider_state == "Gliding" or gliderStatus.glider_state == "Glider-Thrusters")) then
+    if (io_Settings.Enabled and (g_Away or g_ForceEnabled)) then
         -- Get the item info
-        local itemInfo = Game.GetItemInfoByType(io_Settings.Item)
-        local itemCooldown = 0
+        local itemInfo      = Game.GetItemInfoByType(io_Settings.Item)
+        local itemCooldown  = 0
         Debug.Table("itemInfo", itemInfo)
 
         -- Get the ability info and state of the item
@@ -139,12 +178,16 @@ function CancelGlider()
             end)
 
             Debug.Table("pcall()", {status = status, err = err})
+
+            -- Set input mode to default
             Component.SetInputMode("default")
 
             -- Schedule a callback to see if the glider was actually canceled (Icarus boost ...)
-            if (not CB2_CancelGlider:Pending()) then
+            if (not CB2_CheckGlider:Pending()) then
+                g_Checks = 0
+
                 Debug.Log("Scheduling callback to check if glider was canceled")
-                CB2_CancelGlider:Schedule(1)
+                CB2_CheckGlider:Schedule(1)
             end
         end
     end
@@ -193,6 +236,9 @@ function OnComponentLoad()
     CB2_CancelGlider = Callback2.Create()
     CB2_CancelGlider:Bind(CancelGlider)
 
+    CB2_CheckGlider = Callback2.Create()
+    CB2_CheckGlider:Bind(CheckGlider)
+
     CB2_CleanUpIncidents = Callback2.Create()
     CB2_CleanUpIncidents:Bind(CleanUpIncidents)
 
@@ -233,9 +279,8 @@ function OnPlayerGlide(args)
     Debug.Event(args)
 
     if (io_Settings.Enabled and (g_Away or g_ForceEnabled) and args.gliding) then
-        if (not CB2_CancelGlider:Pending()) then
-            Component.SetInputMode("cursor")
-            CB2_CancelGlider:Schedule(0.1)
+        if (not CB2_CheckGlider:Pending()) then
+            CB2_CheckGlider:Execute()
         end
     end
 end
